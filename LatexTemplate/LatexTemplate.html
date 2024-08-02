@@ -1,0 +1,231 @@
+<html><body>
+
+<h1>
+Typesetting Using LaTeX:</h1>
+
+<h2>
+Guidelines for Dissertations, Theses, and Project Reports
+<br>in the Department of Computer Science and Engineering
+</h2>
+<p><b>by Edward B. Allen and M. Ramkumar</b>
+</p>
+<p>
+<b>Contents</b>
+</p>
+<ul>
+<li>
+<a href="#announcments">Announcements
+<a>
+</li><li>
+<a href="#introduction">Introduction
+<a>
+</li><li>
+<a href="#thesis">Dissertations, theses, and project reports</a> ---
+<a href="examplethesis.pdf">examplethesis.pdf</a>
+</li><li>
+<a href="#moreabout">More about LaTeX</a>
+</li>
+</ul>
+
+
+
+<h3><a name=announcements>Announcements
+</h3>
+<p>
+<b>Announcing "passing of the torch":</b>
+On 10/1/14, Dr. M. Ramkumar assumed responsibility for this thesis template, due to Dr. Edward Allen's retirement in May 2015.
+Also, examplethesis.pdf was updated for clarity.
+</p><p>
+<b>Announcing revised approval page layout:</b>
+On 8/15/13, we released a new version of msuthesis.cls and examplethesis.tex to conform to a new approval page layout required by the University.
+<a href="http://library.msstate.edu/thesis/index.asp">
+http://library.msstate.edu/thesis/index.asp
+</a>
+</p><p>
+<b>Announcing a simplification:</b> On 7/11/13, we released a new version of msuthesis.cls and relevant sections of examplethesis.pdf.
+The standard LaTeX commands <b>\section</b>, <b>\subsection</b>,  and <b>\subsubsection</b>,
+with lower case 's' will now properly indent the first paragraph after a section title when there is a paragraph following the section title.
+This indent is required by the <em>Standards</em>.
+Similar commands with capital letters ("camel-case") are deprecated,
+and therefore should no longer be used with this template.
+They will work, but
+<b>\Section</b>,
+<b>\SubSection</b>,
+and <b>\SubSubSection</b> are <b>not</b> recommended.
+</p><p>
+Similarly, If there is no paragraph
+following a section title,
+because a subsection title immediately follows,
+use the appropriate <b>new</b> command so that the spacing between titles
+conforms to the <em>Standards</em>.
+Note there are no capital letters in the command names:
+<b>\sectionnoparagraph</b>,
+<b>\subsectionnoparagraph</b>,
+and <b>\subsubsectionnoparagraph</b>.
+Similar commands with capital letters ("camel-case") are deprecated,
+and therefore should no longer be used with this template.
+They will work, but are <b>not</b> recommended, for example,
+<b>\SectionNoParagraph</b>.
+</p><p>
+The new file is at the link below.
+</p>
+
+</p><p>
+<b>Announcing a bug fix:</b> On 10/19/12, we released a new version of msuthesis.cls that fixes the following bugs that may cause your thesis to be rejected by the library per the 6th edition of the university's <it>Standard</it>.
+</p><p>
+The new file is at the link below.
+</p>
+<ul>
+<li>
+The spacing between the title List of Tables and the first entry should be 2 or 3 blank lines. (Previously was just one blank line.)
+</li><li>
+The spacing between the title List of Figures and the first entry should be 2 or 3 blank lines. (Previously was just one blank line.)
+</li><li>
+The spacing between a chapter title and the first line of the chapter should be 2 or 3 blank lines.  Previously, if the first line was a paragraph, the spacing was correct, but if the first line was a section title, the spacing was only one blank line.  The correction has 3 blank lines if the first line is a paragraph and 2 blank lines if the first line is a section title.
+</li>
+</ul>
+<p>
+<b>Announcing a major update:</b>
+In May 2012, we released a new version of LaTeX templates for Mississippi State University documents, as described below.  New features include the following.
+</p>
+<ul>
+<li>
+Conformance with the 2012 6th Edition of <i>Standards for Preparing Theses and Dissertations</i> published by the Graduate School of Mississippi State University. See
+<a href="http://www.grad.msstate.edu/current/publications/">http://www.grad.msstate.edu/current/publications/</a>
+and <a href="http://library.msstate.edu/thesis">http://library.msstate.edu/thesis</a>
+</li><li>
+The Dean of the Graduate School has approved automatic placement of figures and tables by LaTeX, even though this style does not always conform to the <i>Standards</i>.  Therefore, you should let the MSU library know that you have used the template when you submit your thesis or dissertation for review.
+</li><li>
+Choice of graphics file formats used in figures. We provide a batch file for each option for use with TeXworks.  The template supports either of the following but not both in the same document.
+   <ul>
+   <li>
+   *.pdf, *.jpg, and *.png in the same document
+   </li><li>
+   *.eps only
+   </li>
+   </ul>
+</li><li>
+Section titles that are more than one line long.  However, as a matter of style, we discourage long section titles.
+</li><li>
+Captions of figures and tables that are more than one line long.  However, the template does not support explanatory paragraphs as part of the caption, even though allowed by the <i>Standards</i> and even though that is the style of some journals.
+</li><li>
+Instructions for using TeXworks which is included with MiKTeX.
+</li><li>
+A major revision to the example thesis.  See the chapters Getting Started, Preparing References, and Typesetting Figures and Tables.
+</li>
+</ul>
+<p>
+The prior version was released in June 2009.
+</p>
+
+<h3><a name=introduction>Introduction</h3>
+<p>
+The template presented below was designed for the needs of students in the Department of Computer Science and Engineering at Mississippi State University.  Others are welcome to use it and to adapt it to your own needs.
+</p><p>
+LaTeX is an open-source (free) software
+system for typesetting documents which extends TeX, a typesetting system
+invented by D. E. Knuth. It produces beautiful mathematics and has good
+tools for managing bibliographies.&nbsp; However, it does not have a WYSIWYG
+user interface.
+</p><p>A template for dissertations, theses, and project reports is available for free download.
+See the sections below for details. You may download the documents listed below that explain some additional details.
+</p><p>
+Files for the template are available for free download in a *.zip archive file.  See below.
+</p><p>
+The files below and the instructions were tested using MS Windows.  The *.zip files were created using MS Windows features.  LaTeX is widely used on other operating systems and porting this template to non-Windows environments should be straight forward.
+</p><p>
+Please send bug reports to Dr. M. Ramkumar via email at
+ramkumar@cse.msstate.edu
+</p>
+
+
+<h3><a name=thesis>
+Dissertations, theses, and project reports
+</a></h3>
+<p>
+If you use this template for your thesis or dissertation,
+be sure to inform the MSU library staff of this fact
+when you submit your document for their review.
+This will facilitate their review.
+</p><p>
+<a href="examplethesis.pdf">examplethesis.pdf</a>
+explains how to typeset
+a dissertation or thesis using LaTeX that conforms to Mississippi State University standards
+and style requirements of the Department of Computer Science and Engineering. This example thesis is useful as a template.  The Department of Computer Science and Engineering requires that M.S. Project Reports conform to the same format and style requirements as a thesis.
+</p><p>
+To use as a template, download the *.zip file into your directory,
+unzip using MS Windows features,
+and proceed to use it as described in the *.pdf document.
+</p><p>
+Download:
+</p>
+<ul>
+<li>
+<a href="examplethesis.zip">examplethesis.zip</a>
+</li><li>
+<a href="examplethesis.pdf">examplethesis.pdf</a>
+</li><li>
+<a href="msuthesis.cls">msuthesis.cls</a>
+</li>
+</ul>
+
+<h3><a name=moreabout>
+More about LaTeX
+</a></h3>
+<p>
+Learning LaTeX is similar to learning a programming language like HTML.&nbsp; You
+<span style="font-weight: bold;">must</span> have a reference manual.&nbsp; I recommend that you <b>buy</b> one
+of the following. It will be worth the investment.
+</p>
+<ul>
+<li><i>A Guide to LaTeX</i>, by Helmut Kopka and Patrick W. Daly, Addison-Wesley. This is highly recommended.
+</li><li>
+<i>The LaTeX Companion</i>, by Michel Goossens, Frank Mittelbach, and Alexander
+Samarin, Addison-Wesley.
+</li><li>
+<i>LaTeX: A Document Preparation System</i>, by Leslie Lamport, Addison-Wesley
+</li>
+</ul>
+<p>
+An on-line reference is at <a href="http://en.wikibooks.org/wiki/LaTeX">http://en.wikibooks.org/wiki/LaTeX</a>
+</p><p>
+<a href="http://tex.loria.fr">A (La)TeX encyclopaedia (http://tex.loria.fr)</a>
+has a wealth of information about LaTeX and related products, including
+links to articles and on-line help.  This may be old information.
+<p><a href="http://www.miktex.org/">MiKTeX</a> (pronounced mick-tek) is
+an up-to-date implementation of LaTeX and related programs for Windows (all
+current variants). <a href="http://www.miktex.org/">http://www.miktex.org/</a>
+It comes with TeXworks for a user interface.
+</p><p>
+You can download any LaTeX-related software for free from the
+<a href="http://www.ctan.org">Comprehensive
+TeX Archive Network (CTAN) (http://www.ctan.org)</a> A smoothly
+functioning LaTeX system is composed of many components by many authors,
+so there is a lot to learn.
+</p>
+<p>Edward B. Allen and M. Ramkumar
+<br>Updates:
+<small>
+<br>24 Feb 2003 added \Tablewithfigure, \Tabledblwithfigure, \rotatedtablewithfigure
+<br>15 Dec 2003 added \Tablecontinued, Appendix title page, FAQ chapter, minor updates
+<br>1 Feb 2005 added pricesfirst.tex and pricesnext.tex to match&nbsp; exchaplatex.tex
+<br>1 Feb 2005 added pricesfirst.tex and pricesnext.tex to match&nbsp; exchaplatex.tex
+<br>29 Jun 2005 added exfaq.tex to index.html
+<br>11 Oct 2005 modified msuthesis.cls for different caption style
+<br>1 Nov 2005 doublespace between caption number and text
+<br>3 Nov 2005 doublespace between section title and first paragraph (not more)
+<br>10 Mar 2006 italics subsubsection titles, added limitations, rewording, etc.
+<br>17 May 2007 Major revision to make thesis conform to new MSU standards
+<br>Apr 2008 Minor revisions to make thesis conform to library reviews
+<br>11 Jun 2009 Minor revisions to make spacing conform to library reviews
+<br>29 May 2012 Conform to Standards 6th ed. and other improvements
+<br>22 Oct 2012 Fix spacing bugs
+<br>7 Dec 2013 Fix bottom margin of title page
+<br>11 Jul 2013 Deprecate camelcase \Section etc., and fix for one-line titles
+<br>15 Aug 2013 Fix for revised thesis approval page layout
+<br>25 Mar 2014 In msuthesis.cls fixed \Table so that \Tablecontinue works correctly.
+<br>1 Oct 2014 M. Ramkumar assumed responsibility for this template. Non-thesis templates were deprecated and are no longer available.
+<br>1 Oct 2014 examplethesis.pdf was updated for clarity.
+</small>
+</p>
+</body></html>
