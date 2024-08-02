@@ -1,0 +1,288 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>Network Security - CSE 4383 / 6383 </title>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=windows-1252">
+</head>
+<body alink="#000099" vlink="#990099" link="#000099"
+ style="color: rgb(0, 0, 0); background-color: rgb(255, 255, 204);">
+
+<map name="tbanner">
+<area shape="rect" coords="3,7,162,55" href="http://www.msstate.edu" title="">
+<area shape="rect" coords="211,9,688,99" href="http://www.cse.msstate.edu" title
+="">
+<area shape="rect" coords="6,132,63,149" href="index.html" title="Home">
+<area shape="rect" coords="221,129,346,152" href="publications.html" title="Publ
+ications">
+<area shape="rect" coords="381,129,478,153" href="research.html"
+ title="Research">
+<area shape="rect" coords="89,129,182,155" href="teaching.html"
+ title="Teaching">
+<area shape="rect" coords="512,129,593,152" href="projects.html"
+ title="Projects">
+<area shape="rect" coords="630,129,664,150" href="bio.html" title="Bio">
+<area shape="rect" coords="687,132,740,153" href="links.html" title="Links">
+</map>
+<center>
+<img src="tmenu.jpg" title="" alt="" border="0" style="width: 763px;
+height: 217px;" usemap="#tbanner">
+</center>
+
+<h1 align="center">CSE 4383/6383 <br>
+</h1>
+<div style="text-align: center;">
+<h2>Network Security</h2>
+<h2>Spring 2020</h2>
+</div>
+<hr>
+<table border="1" cellspacing="1" width="100%">
+  <tbody>
+    <tr>
+      <td>
+      <p align="center"><b>Session</b></p>
+      </td>
+      <td>
+      <p align="center"><b>Instructor</b></p>
+      </td>
+      <td>
+      <p align="center"><b>Office Hours</b></p>
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: center;"> 1230-0145, T,R (BU 104)<br>
+      </td>
+      <td>
+      <p align="center"><a href="mailto:ramkumar@cse.msstate.edu">Mahalingam
+Ramkumar<br>
+      </a></p>
+      <p align="center">315 Butler, Ph: 5-8435</p>
+      </td>
+      <td>
+      <ul>
+        <li> T,R 2-3</li>
+      </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<hr>
+
+<h2><a href="#overview">Overview</a><br>
+</h2>
+<h2><a href="#syllabus">Syllabus</a></h2>
+<h2><a href="#cp">Course Policies</a></h2>
+<h3> Lecture Slides</h2>
+<h3><a href="cns_intro.pdf">Overview</a> </h2>
+<h3><a href="SymmCrypt6.pdf">Symmetric Cryptography</a> </h3>
+<h3><a href="NumberTheoryS18.pdf">Asymmetric Cryptography</a> </h3>
+<h3><a href="https://docs.google.com/presentation/d/1wZOaHUYtcIImPLqgyalexS82BQ7KPUnNyC8dvNEUh0o/edit?usp=sharing">Cryptography Review</a> </h3>
+<h3><a href="authkds.pdf">Authentication and PKI</a> </h3>
+<h3><a href="kerb.pdf">Kerberos</a> </h3>
+<h3><a href="WebSecurity1.pdf">Lecture Slides (PDF), Web Security</a> </h3>
+<h3><a href="pgp16.pdf">Lecture Slides (PDF), PGP</a> </h3>
+<h3><a href="ipsec20.pdf">Lecture Slides (PDF), IPsec</a>  </h3>
+<h3><a href="https://docs.google.com/presentation/d/1i64aLf2eLhHIR-iL7sqeX_zX8BtWghzVeTZTeWwHeSY/">Wireless Security </a> </h3>
+<h3><a href="https://docs.google.com/presentation/d/14r-duLwGU3j4M4fcMsK7p9rquYWJ3FGWDY68weO91Iw/edit?usp=sharing">Lecture Slides EKE</a> </h3>
+<h3><a href="ids.pdf">Lecture Slides (PDF), Intrusion Detection</a> </h3>
+<h3><a href="firewalls.pdf">Lecture Slides (PDF), Firewalls</a></h3>
+<br>
+<h3><a href="https://docs.google.com/document/d/1ESHt25lhKVZLG6B919AAAxUzT2e2nV2E2XqnF5yJEPo/edit?usp=sharing">Homework 1</a></h3>
+<h3><a href="https://docs.google.com/document/d/1IrAV8RWvJZO_R5w-iqj7BSuflkb9v0XUt0gmaivtX2w/edit?usp=sharing">Homework 2</a></h3>
+<h3><a href="https://docs.google.com/document/d/1HpjDP-7IISiUkbUj0HbyNUqgua0tNKg-4tA7w-mKW8Q/edit?usp=sharing">Homework 3</a></h3>
+<h3 style="text-align: center;"><a name="overview">Overview</a></h3>
+<br>
+ Network Security deals with "policies and practices adopted to prevent and monitor unauthorized access, misuse, modification, or denial of a computer network and network-accessible resources."  
+
+This course begins with a broad overview of 2 topics: 1) Cryptography, a useful tool for achieving network security goals, and 2) Data Communication Networks (more specifically, the Internet). Note that the first topic is dealt with in more detail in CSE 4173/6173 (Cryptography); the second is dealt with in more detail in CSE 4153/6153 (Data Communication Networks). 
+
+The focus of this course is policies and protocols used at different scales, and for very different purposes. Some of the topics covered include key mangement schemes like  PKI and Kerberos, IP Security (IPSec), Secure Socket Layer (SSL/TLS), DNS Security (DNSSEC), BGP security, WEP/WPA, and 802.1x. This course also co
+<br>
+<br>
+<h4>Text (not required) <span style="font-style: italic;"> : Cryptography and Network
+Security</span>, Third Edition, by William Stallings, Prentice Hall,
+2003<br>
+</h4>
+<h3>Additional References</h3>
+<ol>
+  <li><span style="font-style: italic;">Cryptography, Theory and
+Practice</span>, Douglas R. Stinson, 2nd Edition, CRC Press.</li>
+  <li><span style="font-style: italic;">A Course in Number Theory and
+Cryptography</span>, Neal Koblitz</li>
+  <li><span style="font-style: italic;">Supplemental material</span>
+that will be provided by the instructor in electronic form - usually in
+pdf format.</li>
+</ol>
+<h2>
+<hr> </h2>
+<h2 align="center"><a name="syllabus">Syllabus</a></h2>
+<div style="text-align: center;">(Subject to change)<br>
+</div>
+<br>
+<table border="1" cellspacing="1" width="100%">
+  <tbody>
+    <tr>
+      <td>
+      <p align="center"><span style="font-weight: bold;">Dates</span><br>
+      </p>
+      </td>
+      <td>
+      <p align="center"><b>Topic<br>
+      </b></p>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 1-2<br>
+      </td>
+      <td> Review of Cryptography and Layered Network Architecture <br>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 3<br>
+      </td>
+      <td>Key Distribution, PKI, Kerberos, PGP<br>
+      </td>
+    </tr>
+    <tr>
+      <td>Weeks 4-5<br>
+      </td>
+      <td>SSL, SET, IPSec <br>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 6-7<br>
+      </td>
+      <td>DNSSEC, BGP Security<br>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 8-9<br>
+      </td>
+      <td>WEP/WPA, IEEE 802.2, VLAN<br>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 10<br>
+      </td>
+      <td> Intrusion Detection, DoS, Firewalls<br>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 11-12<br>
+      </td>
+      <td>Blockchain Networks<br>
+      </td>
+    </tr>
+    <tr>
+      <td>Week 13-14<br>
+      </td>
+      <td> Cloud Security<br>
+      </td>
+    </tr>
+    <tr>
+      <td style="vertical-align: top;">Week 15 <br>
+      </td>
+      <td style="vertical-align: top;">Review<br>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<br>
+<br>
+<div style="text-align: center;">
+<h2><a name="cp">Course Policies</a></h2>
+<div style="text-align: left;">
+<h3>Grade determination</h3>
+<br>
+<table style="text-align: left; width: 50%;" border="1" cellspacing="2"
+ cellpadding="2">
+  <tbody>
+    <tr>
+      <td style="vertical-align: top;">Quizzes/Assignments&nbsp; <br>
+      </td>
+      <td style="vertical-align: top;">40%<br>
+      </td>
+    </tr>
+    <tr>
+      <td style="vertical-align: top;">Term Paper&nbsp; <br>
+      </td>
+      <td style="vertical-align: top;">10%<br>
+      </td>
+    </tr>
+    <tr>
+      <td style="vertical-align: top;">Exams&nbsp;&nbsp;&nbsp; <br>
+      </td>
+      <td style="vertical-align: top;">30%<br>
+      </td>
+    </tr>
+    <tr>
+      <td style="vertical-align: top;">Questions&nbsp; <br>
+      </td>
+      <td style="vertical-align: top;">10%<br>
+      </td>
+    </tr>
+    <tr>
+      <td style="vertical-align: top;">Participation&nbsp; <br>
+      </td>
+      <td style="vertical-align: top;">10%<br>
+      </td>
+    </tr>
+  </tbody>
+</table>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp; <br>
+<h4>Course Requirements and Grading Policy</h4>
+<ol>
+  <li>All students will be expected to sign an attendance sheet for
+every class.</li>
+  <li>The student could be tested on any material provided in the
+reference text and supplemental material provided by the instructor.
+Material beyond the scope of this course in the text and supplemental
+material will be explicitly pointed out by the instructor. 
+<li> Midterm and final
+exams will be comprehensive (one cheat sheet will be permitted).</li>
+  <li> All material submiited by electronic means should be in ASCII or 
+in pdf format.  </li>
+  <li>Graduate students may  be required to answer additional questions in
+quizzes and exams.  </li>
+</ol>
+<br>
+<br>
+</div>
+<div style="text-align: left;">
+<h3>Academic Honesty</h3>
+Unless explicitly specified, it is to be understood that all homework
+assignments and tests are to be performed without collaboration. The
+departments academic honesty policy applies to this class and can be<br>
+found <a href="http://www.cse.msstate.edu/academics/honesty.html">here</a>
+.<br>
+<br>
+<h4>Add / Drop Policy</h4>
+<h5>Add/drop without penalty</h5>
+A student has through the fifth class day into the semester to add a
+course and through the tenth class day to drop a course without being
+assessed a fee or academic penalty.<br>
+<br>
+<h5>Drop after the tenth class day through the 30th class day into the
+semester</h5>
+<br>
+A student cannot drop courses after this period except in documented
+cases of serious illness, extreme hardship, or failure of the
+instructor to provide significant assessment of his/her performance. A
+request to drop a course during this period must be approved by the
+student's adviser and academic dean. The dean who permits the drop will
+specify its effective date. A student receiving permission to drop will
+receive a <span style="font-weight: bold;">W</span> on his/her
+academic record and be assessed a fee.<br>
+<br>
+<br>
+</div>
+<br>
+</div>
+<div style="text-align: left;"><br>
+</div>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>
