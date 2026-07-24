@@ -2,28 +2,25 @@
 """
 Get monthly weather averages for counties in county_list.csv
 
-WHAT THIS DOES
-  Reads your county list (code + lat/lon), downloads weather from Open-Meteo,
-  and saves monthly averages to a CSV file.
-
 SETUP (one time)
   1. Put county_list.csv in your Downloads folder
-  2. Open a terminal in this folder
-  3. Run:  pip install numpy
+  2. Save this file as get_monthly_weather.py in Downloads
+  3. In Terminal:  pip install numpy
 
-EACH MONTH (after the month has ended)
-  python get_monthly_weather.py --month 2026-07
-
-  Or automatically use last month:
-  python get_monthly_weather.py --latest
-
-  If you see "Too Many Requests", use a longer pause:
-  python get_monthly_weather.py --latest --pause 10 --batch-size 10
-
-FIRST TIME / SEVERAL MONTHS
+FIRST RUN (April–June 2026)
+  cd ~/Downloads
   python get_monthly_weather.py --start 2026-04-01 --end 2026-06-30
 
-Output file (created/updated automatically):
+EACH MONTH AFTER THAT
+  python get_monthly_weather.py --latest
+
+IF YOU SEE "Too Many Requests"
+  Wait a few minutes, then run the SAME command again.
+  The script resumes where it left off.
+  You can also slow it down more:
+  python get_monthly_weather.py --start 2026-04-01 --end 2026-06-30 --pause 15 --batch-size 5
+
+Output file:
   ~/Downloads/county_weather_monthly.csv
 """
 
@@ -33,8 +30,10 @@ import argparse
 import csv
 import json
 import math
+import random
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -43,7 +42,6 @@ from pathlib import Path
 
 import numpy as np
 
-# Columns written to the output CSV (after id fields).
 FEATURES = [
     "t2m",
     "t850",
@@ -67,19 +65,23 @@ FEATURES = [
     "tp",
 ]
 
-HOURLY_VARS = [
+# Split into two lighter API calls to avoid rate limits.
+HOURLY_SURFACE = [
     "temperature_2m",
     "dew_point_2m",
     "surface_pressure",
     "precipitation",
     "runoff",
+    "wind_u_component_10m",
+    "wind_v_component_10m",
+]
+
+HOURLY_PRESSURE = [
     "temperature_850hPa",
     "temperature_250hPa",
     "relative_humidity_850hPa",
     "relative_humidity_250hPa",
     "relative_humidity_500hPa",
-    "wind_u_component_10m",
-    "wind_v_component_10m",
     "wind_u_component_850hPa",
     "wind_v_component_850hPa",
     "wind_u_component_250hPa",
@@ -118,7 +120,6 @@ def iter_months(start, end):
 
 
 def specific_humidity(temp_c, rh_pct, pressure_hpa):
-    """kg/kg from temperature (C), relative humidity (%), pressure (hPa)."""
     es = 6.112 * np.exp((17.67 * temp_c) / (temp_c + 243.5))
     e = (rh_pct / 100.0) * es
     return 0.622 * e / (pressure_hpa - 0.378 * e)
@@ -141,28 +142,37 @@ def daily_totals(times, values):
 
 
 def is_rate_limit(err):
+    if isinstance(err, urllib.error.HTTPError) and err.code == 429:
+        return True
     text = str(err)
     return "429" in text or "Too Many Requests" in text
 
 
-def http_json(url, retries=10):
-    last_err = None
-    for attempt in range(retries):
+def http_json(url):
+    """Download JSON. On rate limits, keep waiting and retrying (does not give up)."""
+    attempt = 0
+    while True:
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "get-monthly-weather/1.0"})
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "get-monthly-weather/2.0"},
+            )
             with urllib.request.urlopen(req, timeout=300) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as err:
-            last_err = err
+            attempt += 1
             if is_rate_limit(err):
-                # Open-Meteo asks us to slow down; wait longer each time.
-                wait = min(30 * (2 ** attempt), 300)
-                print(f"  Too many requests — pausing {wait}s, then retrying…")
+                # Long pause + a little randomness so retries don't all hit at once.
+                wait = min(60 + 30 * (attempt - 1), 600) + random.uniform(0, 5)
+                print(
+                    f"  Too many requests from the weather website.\n"
+                    f"  Waiting {wait:.0f} seconds, then trying again "
+                    f"(attempt {attempt})…"
+                )
             else:
-                wait = min(2 ** attempt, 60)
-                print(f"  Network issue, retrying in {wait}s… ({err})")
+                wait = min(2 ** min(attempt, 6), 60) + random.uniform(0, 1)
+                print(f"  Network issue, retrying in {wait:.0f}s… ({err})")
             time.sleep(wait)
-    raise RuntimeError(f"Could not download data:\n{url}") from last_err
 
 
 def load_counties(path):
@@ -183,18 +193,19 @@ def load_counties(path):
     return rows
 
 
-def fetch_batch(lats, lons, start, end):
+def fetch_batch(lats, lons, start, end, hourly_vars, include_daily=False):
     params = {
         "latitude": ",".join(f"{x:.6f}" for x in lats),
         "longitude": ",".join(f"{x:.6f}" for x in lons),
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
-        "hourly": ",".join(HOURLY_VARS),
-        "daily": "temperature_2m_max",
+        "hourly": ",".join(hourly_vars),
         "models": "ecmwf_ifs025",
         "wind_speed_unit": "ms",
         "timezone": "GMT",
     }
+    if include_daily:
+        params["daily"] = "temperature_2m_max"
     url = API_URL + "?" + urllib.parse.urlencode(params)
     data = http_json(url)
     if isinstance(data, dict):
@@ -202,6 +213,16 @@ def fetch_batch(lats, lons, start, end):
             raise RuntimeError(data.get("reason", "API error"))
         return [data]
     return data
+
+
+def merge_payloads(surface_payload, pressure_payload):
+    """Combine the two API responses for one location."""
+    hourly = dict(surface_payload["hourly"])
+    hourly.update(pressure_payload["hourly"])
+    return {
+        "hourly": hourly,
+        "daily": surface_payload["daily"],
+    }
 
 
 def averages_for_one_place(payload):
@@ -274,54 +295,89 @@ def save_csv(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = ["COUNTY_MUNI_CODE", "Latitude", "Longitude", "year", "month"] + FEATURES
     rows = sorted(rows, key=lambda r: (r["year"], r["month"], r["COUNTY_MUNI_CODE"]))
-    with path.open("w", newline="") as f:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
         for r in rows:
             w.writerow({k: fmt(r.get(k, "")) for k in fields})
+    tmp.replace(path)
 
 
 def merge(old_rows, new_rows):
-    """Keep old data, replace any county+year+month that we just downloaded."""
     index = {(r["COUNTY_MUNI_CODE"], r["year"], r["month"]): r for r in old_rows}
     for r in new_rows:
         index[(r["COUNTY_MUNI_CODE"], r["year"], r["month"])] = r
     return list(index.values())
 
 
-def process_month(counties, year, month, start, end, batch_size, pause_seconds):
+def already_done(existing_rows, year, month):
+    return {
+        r["COUNTY_MUNI_CODE"]
+        for r in existing_rows
+        if r["year"] == year and r["month"] == month
+    }
+
+
+def process_month(counties, year, month, start, end, batch_size, pause_seconds, existing_rows, output_path):
     print(f"\nDownloading {year}-{month:02d} ({start} to {end}) …")
-    weather = {}
-    n = len(counties)
+    done = already_done(existing_rows, year, month)
+    todo = [c for c in counties if c["COUNTY_MUNI_CODE"] not in done]
+    if done:
+        print(f"  Resuming: {len(done)} counties already saved, {len(todo)} left")
+    if not todo:
+        print("  Nothing left to download for this month.")
+        return []
+
+    new_rows = []
+    n = len(todo)
     for i in range(0, n, batch_size):
-        batch = counties[i : i + batch_size]
-        print(f"  Counties {i + 1}-{i + len(batch)} of {n}")
-        payloads = fetch_batch(
+        batch = todo[i : i + batch_size]
+        print(f"  Counties {i + 1}-{i + len(batch)} of {n} remaining")
+
+        surface = fetch_batch(
             [c["Latitude"] for c in batch],
             [c["Longitude"] for c in batch],
             start,
             end,
+            HOURLY_SURFACE,
+            include_daily=True,
         )
-        for county, payload in zip(batch, payloads):
-            weather[county["COUNTY_MUNI_CODE"]] = averages_for_one_place(payload)
-        # Pause between requests so the free weather API does not block us.
+        time.sleep(pause_seconds)
+
+        pressure = fetch_batch(
+            [c["Latitude"] for c in batch],
+            [c["Longitude"] for c in batch],
+            start,
+            end,
+            HOURLY_PRESSURE,
+            include_daily=False,
+        )
+
+        batch_rows = []
+        for county, s_payload, p_payload in zip(batch, surface, pressure):
+            payload = merge_payloads(s_payload, p_payload)
+            row = {
+                "COUNTY_MUNI_CODE": county["COUNTY_MUNI_CODE"],
+                "Latitude": county["Latitude"],
+                "Longitude": county["Longitude"],
+                "year": year,
+                "month": month,
+            }
+            row.update(averages_for_one_place(payload))
+            batch_rows.append(row)
+
+        new_rows.extend(batch_rows)
+        # Save after every batch so a crash/rate-limit doesn't lose progress.
+        combined = merge(existing_rows, new_rows)
+        save_csv(output_path, combined)
+        print(f"  Saved progress: {len(combined)} total rows -> {output_path}")
+
         if i + batch_size < n:
             print(f"  Pausing {pause_seconds}s before next request…")
             time.sleep(pause_seconds)
 
-    rows = []
-    for c in counties:
-        code = c["COUNTY_MUNI_CODE"]
-        row = {
-            "COUNTY_MUNI_CODE": code,
-            "Latitude": c["Latitude"],
-            "Longitude": c["Longitude"],
-            "year": year,
-            "month": month,
-        }
-        row.update(weather[code])
-        rows.append(row)
-    return rows
+    return new_rows
 
 
 def main():
@@ -345,14 +401,14 @@ def main():
     p.add_argument(
         "--batch-size",
         type=int,
-        default=20,
-        help="How many counties per download (smaller = gentler on the API)",
+        default=10,
+        help="How many counties per download (default: 10; use 5 if rate-limited)",
     )
     p.add_argument(
         "--pause",
         type=float,
-        default=5.0,
-        help="Seconds to wait between API requests (default: 5)",
+        default=10.0,
+        help="Seconds to wait between API requests (default: 10)",
     )
     args = p.parse_args()
 
@@ -375,18 +431,29 @@ def main():
     print(f"Found {len(counties)} counties in {args.counties}")
     print(f"Saving to {args.output}")
     print(f"Period: {start} through {end}")
-    print("(This can take a while for thousands of counties.)")
+    print(f"Pace: {args.batch_size} counties/request, {args.pause}s pause")
+    print("Tip: if it slows down for rate limits, leave it running — or stop and re-run later to resume.")
 
     existing = load_existing(args.output)
+    if existing:
+        print(f"Found {len(existing)} rows already in the output file (will resume/skip those).")
+
     all_new = []
     for year, month, ms, me in iter_months(start, end):
+        # Reload each month so resume state stays accurate after saves.
+        existing = load_existing(args.output)
         month_rows = process_month(
-            counties, year, month, ms, me, args.batch_size, args.pause
+            counties,
+            year,
+            month,
+            ms,
+            me,
+            args.batch_size,
+            args.pause,
+            existing,
+            args.output,
         )
         all_new.extend(month_rows)
-        combined = merge(existing, all_new)
-        save_csv(args.output, combined)
-        print(f"  Saved progress: {len(combined)} rows in {args.output}")
 
     print("\nFinished.")
     print(f"Open this file: {args.output}")
