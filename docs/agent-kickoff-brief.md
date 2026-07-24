@@ -1,144 +1,203 @@
-# Kickoff Brief for Future Agent
+# Kickoff Brief — Triangle Merkle Prover / Verifier Architecture
 
-Use this document as prior context. Prefer this brief over re-deriving decisions from scratch.
-Full chat export (optional detail):
-`docs/cursor_chat_county_weather_and_spatial_mesh.txt`
-Longer planning notes:
-`docs/spatial-merkle-mesh-planning-summary.md`
+Hand this to a future agent as prior context.
+User prefers plain language. Do not restart architecture debates already settled below unless asked.
 
-Repo: `ramkumarmsu/ramkumarmsu.github.io`
-Branch with these docs/scripts: `cursor/county-weather-monthly-2b78`
-User is a beginner with tooling; prefer plain language and concrete next steps.
+Optional deeper references:
+- Planning memo: `docs/spatial-merkle-mesh-planning-summary.md`
+- Full chat export: `docs/cursor_chat_county_weather_and_spatial_mesh.txt`
+- Repo branch: `cursor/county-weather-monthly-2b78`
 
 ---
 
-## Track A — Monthly county weather script (mostly done)
+## Project goal
+Build a verifiable spatial records system where:
 
-### Goal
-Local Python script to compute monthly averages of weather features for all counties in `county_list.csv`.
+1. Geographic space is partitioned into triangles
+2. Each triangle is a Merkle tree leaf
+3. Authoritative actors (“provers”) submit incremental updates with proofs
+4. A compact verifier checks those proofs cheaply
+5. A blockchain / trust network stores roots and accepts valid updates
+6. End users query facts and verify answers against the published root
 
-### Delivered
-- Script: `scripts/get_monthly_weather.py`
-- Features: `t2m,t850,t250,q250,tmax,r500,u850,u250,v500,r850,r250,v250,q850,v850,u10,v10,d2m,sp,SRO,tp`
-- Source: Open-Meteo Historical Forecast API (`ecmwf_ifs025`)
-- EDDI intentionally deferred / low priority
-- Output: `~/Downloads/county_weather_monthly.csv`
-- Supports `--latest`, `--month YYYY-MM`, `--start/--end`
-- Resume-friendly; rate-limit pauses; default slower pacing
+This is meant for reliable digitization of parcel boundaries, zones, utility lines, etc.
 
-### How user runs it
-```bash
-cd ~/Downloads
-pip install numpy
-# put county_list.csv and get_monthly_weather.py in Downloads
-python get_monthly_weather.py --start 2026-04-01 --end 2026-06-30 --pause 15 --batch-size 5
-# later months:
-python get_monthly_weather.py --latest
-```
-
-### Notes
-- User hit HTTP 429 with older script versions; ensure they use the latest script
-- Aggregation: most vars = mean of hourly; `tmax` = mean of daily maxima; `tp`/`SRO` = mean of daily totals (mm/day)
-
-Only revisit Track A if user asks.
+Useful because maps here are not just pictures — they allocate rights, money, liability, or access. The chain commitment makes spatial facts attributable, auditable, non-conflicting, and independently checkable.
 
 ---
 
-## Track B — Main ambitious project (active interest)
+## Core architecture
 
-### Vision
-A verifiable spatial system where land/features are represented as triangles, each triangle is a Merkle leaf, and a blockchain network maintains a committed root. Digitization of parcels, zones, utilities becomes incremental, attributable, and publicly checkable.
+### Geometry substrate
+- Start from a county polygon
+- Triangulate the county interior
+- Build a bounding box around it
+- Triangulate the exterior region = box minus county
+- Lon/lat is acceptable for parcel-scale point-in-triangle queries; projection is not required for the current design intent
+- Later: refine/constrain triangles for parcels, zones, utilities
 
-### Why it is useful
-Not “GIS on chain for novelty.” Useful when maps allocate rights, money, liability, or access:
-- shared multi-agency truth
-- auditable history of boundary/attribute changes
-- verifiable query answers without trusting the responder
-- non-overlapping exclusive claims on a layer
-- composability with permits/contracts/payments
+### Merkle leaf
+A leaf hash commits to:
+- the 3 triangle vertices in **canonical order**
+- **data associated with that triangle**
 
-### Geometry approach
-- Start from county polygon shapefile
-- Triangulate county interior
-- Enclose in bounding box
-- Triangulate exterior = box minus county
-- Projection not required for parcel-scale point-in-triangle queries; lon/lat is acceptable
-- Eventually constrain/refine triangles for parcels, zones, utility lines
+Fixed coordinate precision is required so hashes are deterministic.
 
-### Cryptographic / chain model
-**Leaf hash** = canonical ordering of 3 triangle points + associated triangle data  
-(Fixed coordinate precision required.)
+### Roles
+**Provers**
+- Entities who need to provide reliable data
+- Includes government agencies, utilities, surveyors, licensed digitizers
+- They prepare updates and generate proofs
 
-**Roles**
-- Provers: agencies/utilities/surveyors/etc. who need to publish reliable data and produce proofs
-- Verifiers:
-  - blockchain nodes that validate updates and advance the root
-  - end users who verify query answers against the root
+**Verifiers**
+- Blockchain / network nodes that validate update transactions and advance the root
+- End users / apps that verify query answers against the root
+- Verification must stay trivial
 
-**Design principle**
-- Verification must be trivial
-- Proving may be harder in theory, but should be made easy in practice via a prover library
-- Prefer local incremental ops that preserve non-overlap by construction
+### Design principle
+- Verifier work: cheap and obvious
+- Prover work: may be heavier in theory, but should be made easy in practice with a library
+- Preserve non-overlap by construction via restricted local operations
+- Do **not** put full GIS inside the verifier
 
-**Initial ops**
-1. `SplitTriangle(corner, point_on_opposite_edge)` → replace one leaf with two
-2. `SetTriangleData(...)` → same geometry, update payload/authorship
+---
 
-Avoid arbitrary remeshing in the verifier path.
+## First-class operations (MVP)
 
-### Temporal boundaries (important practical issue)
-Boundaries change over time (Louisiana coastal/river/thin geometries are a motivating hard case).
-System must be a versioned spatial ledger:
-- roots over time
+### 1. SplitTriangle
+Cut one triangle into two by specifying:
+- a corner of the triangle
+- a point on the opposite edge
+
+Verifier checks:
+- old leaf exists under old root (Merkle proof)
+- point lies on the opposite edge (deterministic rule)
+- two child triangles are correctly formed and canonicalized
+- new root correctly replaces one leaf with two
+- payload inheritance rule is followed
+
+### 2. SetTriangleData
+Attach/update data on an existing triangle leaf.
+
+Verifier checks:
+- Merkle proof of old leaf
+- geometry unchanged
+- new data hash/payload valid
+- authorization / signature for that data class
+- Merkle update to new root
+
+These two ops are enough to begin progressive digitization by refinement.
+
+### Later ops (not MVP, but anticipated)
+- Reverse merge of a recorded split pair
+- Reassign triangle between parcels (boundary move)
+- Retire triangle from land domain (e.g. inundation)
+- Introduce triangle into domain (e.g. accretion/fill)
+- Temporal versioning of roots and as-of-date queries
+
+---
+
+## Non-overlap logic
+If:
+- genesis mesh is a valid non-overlapping partition, and
+- only legal local ops are accepted,
+
+then non-overlap is preserved by construction.
+Verifiers should not need a global geometry re-check on every transaction.
+
+---
+
+## Two software components to build
+
+### A. Prover library (larger, ergonomic)
+Helps provers:
+- maintain triangle mesh + adjacency
+- canonicalize points/triangles
+- apply splits / data updates
+- maintain an incremental Merkle tree
+- emit update proof packages (old root → new root)
+- answer queries with inclusion/attribution proofs
+
+GIS dependencies are allowed here.
+
+### B. Compact verifier application (tiny)
+Intended to run inside trustworthy boundaries such as:
+- blockchain runtime / smart contract constraints
+- TEE / enclave
+- air-gapped auditor
+
+It should only:
+- verify Merkle paths
+- evaluate tiny predicates for allowed ops
+- check authorization
+- accept/reject and compute/accept new root
+
+No shapefile IO. No general triangulation. No heavy dependencies.
+
+---
+
+## Temporal / real-world hard case
+Boundaries change over time. Thin and shifting geographies (e.g. Louisiana coastal/river boundaries) are a motivating stress case.
+
+Therefore the long-term system is a **versioned spatial ledger**:
+- sequence of roots over time
+- feature effective dates
 - as-of-date queries
-- later ops such as reassign / retire (land→water) / introduce (accretion), with authority rules
+- explicit change reasons and authorities
 
-### Two software components to build together
-1. **Prover library** (larger): mesh maintenance, splits, canonicalization, incremental Merkle tree, proof package generation, query proofs
-2. **Compact verifier** (tiny): Merkle checks + tiny predicates + auth; small enough for trustworthy boundaries (chain runtime / TEE / auditor)
-
-Do **not** put full GIS tooling inside the verifier.
+MVP can still begin with split + data update on a static genesis mesh.
 
 ---
 
-## Current decisions / preferences
-- No concrete implementation requested yet for Track B unless user asks to start building
-- User wants collaboration on prover library + compact verifier eventually
-- Keep explanations accessible; user is learning Cloud Agent workflow
-- Saved artifacts matter; user had trouble finding past chats in UI
+## Settled preferences from prior discussion
+- Put whole GIS on chain is an aspiration, but only valuable if verifiable multi-party spatial truth is the product
+- Leaf = canonical triangle + data
+- Verifier triviality is non-negotiable
+- Prover UX matters in practice
+- Start with restricted local ops, not arbitrary remesh transactions
+- Projection concerns are secondary for parcel-scale queries
+- EDDI/weather work is a separate side track, not this architecture
 
 ---
 
-## Suggested next steps when user resumes Track B
-Ask which they want first, unless already specified:
+## Requested collaboration
+User wants to eventually produce, together:
+1. prover software library
+2. compact verifier application
 
-1. One-page MVP contract:
+No concrete architecture coding was started yet in the prior chat; user asked for planning first.
+
+---
+
+## Recommended next work when resuming
+Unless user specifies otherwise, proceed in this order:
+
+1. **Write MVP contract (1 page equivalent)**
    - leaf byte layout
    - hash function
-   - coordinate precision
-   - exact split predicate
-   - proof package format
-   - “compact verifier” size/complexity criteria
-2. Then implement verifier stub + prover library stub against that contract
-3. Round-trip demo: genesis tiny mesh → split → data update → verify → query proof
+   - coordinate quantization/precision
+   - canonical triangle ordering rule
+   - exact SplitTriangle predicate
+   - SetTriangleData rules
+   - proof package fields
+   - success criteria for “verifier is compact”
 
-If user asks to code, start with the MVP contract and the smallest end-to-end split/verify demo before county-scale meshing.
+2. **Implement smallest end-to-end demo**
+   - tiny in-memory mesh
+   - prover performs one split + one data update
+   - verifier accepts both
+   - query returns triangle/data with Merkle proof
+
+3. **Only then** scale to county shapefile triangulation / digitization workflow
 
 ---
 
-## Kickoff prompt template (user can paste)
-```text
-Read docs/agent-kickoff-brief.md in this repo (branch cursor/county-weather-monthly-2b78)
-and continue from there.
-
-My next goal:
-<fill in>
-```
-
-Or with raw URL:
+## Paste template for a new agent
 ```text
 Read this kickoff brief and continue from it:
 https://raw.githubusercontent.com/ramkumarmsu/ramkumarmsu.github.io/cursor/county-weather-monthly-2b78/docs/agent-kickoff-brief.md
+
+Focus on the triangle Merkle prover/verifier architecture, not the weather script.
 
 My next goal:
 <fill in>
