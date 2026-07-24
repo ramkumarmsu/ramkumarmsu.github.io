@@ -137,7 +137,12 @@ def daily_totals(times, values):
     return {d: float(np.sum(vals)) for d, vals in buckets.items()}
 
 
-def http_json(url, retries=6):
+def is_rate_limit(err):
+    text = str(err)
+    return "429" in text or "Too Many Requests" in text
+
+
+def http_json(url, retries=10):
     last_err = None
     for attempt in range(retries):
         try:
@@ -146,8 +151,13 @@ def http_json(url, retries=6):
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as err:
             last_err = err
-            wait = min(2 ** attempt, 60)
-            print(f"  Network issue, retrying in {wait}s… ({err})")
+            if is_rate_limit(err):
+                # Open-Meteo asks us to slow down; wait longer each time.
+                wait = min(30 * (2 ** attempt), 300)
+                print(f"  Too many requests — pausing {wait}s, then retrying…")
+            else:
+                wait = min(2 ** attempt, 60)
+                print(f"  Network issue, retrying in {wait}s… ({err})")
             time.sleep(wait)
     raise RuntimeError(f"Could not download data:\n{url}") from last_err
 
@@ -276,7 +286,7 @@ def merge(old_rows, new_rows):
     return list(index.values())
 
 
-def process_month(counties, year, month, start, end, batch_size):
+def process_month(counties, year, month, start, end, batch_size, pause_seconds):
     print(f"\nDownloading {year}-{month:02d} ({start} to {end}) …")
     weather = {}
     n = len(counties)
@@ -291,7 +301,10 @@ def process_month(counties, year, month, start, end, batch_size):
         )
         for county, payload in zip(batch, payloads):
             weather[county["COUNTY_MUNI_CODE"]] = averages_for_one_place(payload)
-        time.sleep(0.4)
+        # Pause between requests so the free weather API does not block us.
+        if i + batch_size < n:
+            print(f"  Pausing {pause_seconds}s before next request…")
+            time.sleep(pause_seconds)
 
     rows = []
     for c in counties:
@@ -326,7 +339,18 @@ def main():
     p.add_argument("--month", help="One month like 2026-06")
     p.add_argument("--start", help="Start date YYYY-MM-DD (with --end)")
     p.add_argument("--end", help="End date YYYY-MM-DD (with --start)")
-    p.add_argument("--batch-size", type=int, default=40, help="How many counties per download")
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=20,
+        help="How many counties per download (smaller = gentler on the API)",
+    )
+    p.add_argument(
+        "--pause",
+        type=float,
+        default=5.0,
+        help="Seconds to wait between API requests (default: 5)",
+    )
     args = p.parse_args()
 
     chosen = sum([bool(args.latest), bool(args.month), bool(args.start or args.end)])
@@ -353,7 +377,9 @@ def main():
     existing = load_existing(args.output)
     all_new = []
     for year, month, ms, me in iter_months(start, end):
-        month_rows = process_month(counties, year, month, ms, me, args.batch_size)
+        month_rows = process_month(
+            counties, year, month, ms, me, args.batch_size, args.pause
+        )
         all_new.extend(month_rows)
         combined = merge(existing, all_new)
         save_csv(args.output, combined)
