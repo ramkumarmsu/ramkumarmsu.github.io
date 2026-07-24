@@ -219,7 +219,12 @@ def daily_sums_from_hourly(
     return {d: float(np.sum(vals)) for d, vals in buckets.items() if vals}
 
 
-def http_get_json(url: str, retries: int = 6, timeout: int = 300) -> object:
+def _is_rate_limit(exc: Exception) -> bool:
+    text = str(exc)
+    return "429" in text or "Too Many Requests" in text
+
+
+def http_get_json(url: str, retries: int = 10, timeout: int = 300) -> object:
     last_err: Optional[Exception] = None
     for attempt in range(retries):
         try:
@@ -228,13 +233,17 @@ def http_get_json(url: str, retries: int = 6, timeout: int = 300) -> object:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as exc:  # noqa: BLE001 - retry broadly for flaky APIs
             last_err = exc
-            sleep_s = min(2 ** attempt, 60)
-            print(f"  retry {attempt + 1}/{retries} after error: {exc} (sleep {sleep_s}s)", flush=True)
+            if _is_rate_limit(exc):
+                sleep_s = min(30 * (2 ** attempt), 300)
+                print(f"  Too many requests — pausing {sleep_s}s…", flush=True)
+            else:
+                sleep_s = min(2 ** attempt, 60)
+                print(f"  retry {attempt + 1}/{retries} after error: {exc} (sleep {sleep_s}s)", flush=True)
             time.sleep(sleep_s)
     raise RuntimeError(f"Failed GET {url}") from last_err
 
 
-def http_get_bytes(url: str, retries: int = 6, timeout: int = 300) -> bytes:
+def http_get_bytes(url: str, retries: int = 10, timeout: int = 300) -> bytes:
     last_err: Optional[Exception] = None
     for attempt in range(retries):
         try:
@@ -243,8 +252,12 @@ def http_get_bytes(url: str, retries: int = 6, timeout: int = 300) -> bytes:
                 return resp.read()
         except Exception as exc:  # noqa: BLE001
             last_err = exc
-            sleep_s = min(2 ** attempt, 60)
-            print(f"  retry {attempt + 1}/{retries} after error: {exc} (sleep {sleep_s}s)", flush=True)
+            if _is_rate_limit(exc):
+                sleep_s = min(30 * (2 ** attempt), 300)
+                print(f"  Too many requests — pausing {sleep_s}s…", flush=True)
+            else:
+                sleep_s = min(2 ** attempt, 60)
+                print(f"  retry {attempt + 1}/{retries} after error: {exc} (sleep {sleep_s}s)", flush=True)
             time.sleep(sleep_s)
     raise RuntimeError(f"Failed GET {url}") from last_err
 
@@ -410,7 +423,7 @@ def fetch_weather_for_month(
             raise RuntimeError(f"Expected {len(batch)} payloads, got {len(payloads)}")
         for county, payload in zip(batch, payloads):
             results[county["COUNTY_MUNI_CODE"]] = aggregate_location_month(payload)
-        time.sleep(0.4)
+        time.sleep(5.0)
 
     with cache_path.open("w") as f:
         json.dump(results, f)

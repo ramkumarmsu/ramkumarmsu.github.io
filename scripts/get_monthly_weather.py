@@ -17,6 +17,9 @@ EACH MONTH (after the month has ended)
   Or automatically use last month:
   python get_monthly_weather.py --latest
 
+  If you see "Too Many Requests", use a longer pause:
+  python get_monthly_weather.py --latest --pause 10 --batch-size 10
+
 FIRST TIME / SEVERAL MONTHS
   python get_monthly_weather.py --start 2026-04-01 --end 2026-06-30
 
