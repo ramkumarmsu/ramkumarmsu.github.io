@@ -1,14 +1,37 @@
 #!/usr/bin/env python3
 """
-Fetch monthly-average weather features for counties in county_list.csv.
+County monthly weather feature averages — local updater.
 
-Period: 2026-04-01 through 2026-06-30
-Sources:
-  - Open-Meteo Historical Forecast API (ECMWF IFS 0.25°) for meteorological fields
-  - NOAA PSL EDDI CONUS archive (EDDI_ETrs_03mn / EDDI_ETrs_06wk) for drought indices
+Pulls Open-Meteo (ECMWF IFS 0.25°) data for counties in county_list.csv and
+writes/merges monthly averages for the features below.
 
-Specific humidity (q850, q250) is derived from temperature and relative humidity
-at the corresponding pressure level.
+Features:
+  t2m, t850, t250, q250, tmax, r500, u850, u250, v500, r850, r250, v250,
+  q850, v850, u10, v10, d2m, sp, SRO, tp
+  (+ optional EDDI_ETrs_03m, EDDI_ETrs_06wk via --with-eddi)
+
+Typical local usage (update last complete month into a growing CSV):
+
+  python fetch_county_weather_monthly.py \\
+      --counties ~/Downloads/county_list.csv \\
+      --output ~/Downloads/county_weather_monthly.csv \\
+      --latest
+
+Update a specific month:
+
+  python fetch_county_weather_monthly.py \\
+      --counties ~/Downloads/county_list.csv \\
+      --output ~/Downloads/county_weather_monthly.csv \\
+      --month 2026-07
+
+Backfill a date range (overwrites matching year/month rows):
+
+  python fetch_county_weather_monthly.py \\
+      --counties ~/Downloads/county_list.csv \\
+      --output ~/Downloads/county_weather_monthly.csv \\
+      --start 2026-04-01 --end 2026-06-30
+
+Dependencies: pip install -r requirements.txt  (numpy)
 """
 
 from __future__ import annotations
@@ -17,10 +40,8 @@ import argparse
 import csv
 import json
 import math
-import os
 import sys
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -31,7 +52,38 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-FEATURES = [
+# Meteorological features always computed from Open-Meteo.
+METEO_FEATURES = [
+    "t2m",
+    "t850",
+    "t250",
+    "q250",
+    "tmax",
+    "r500",
+    "u850",
+    "u250",
+    "v500",
+    "r850",
+    "r250",
+    "v250",
+    "q850",
+    "v850",
+    "u10",
+    "v10",
+    "d2m",
+    "sp",
+    "SRO",
+    "tp",
+]
+
+# Optional NOAA PSL EDDI features (CONUS only; slower to download).
+EDDI_FEATURES = [
+    "EDDI_ETrs_03m",
+    "EDDI_ETrs_06wk",
+]
+
+# Column order matches the originally requested feature list when EDDI is enabled.
+FEATURE_ORDER_WITH_EDDI = [
     "t2m",
     "t850",
     "EDDI_ETrs_03m",
@@ -86,6 +138,12 @@ EDDI_SCALE_MAP = {
 EDDI_BASE = "https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data"
 OPEN_METEO_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 
+ID_FIELDS = ["COUNTY_MUNI_CODE", "Latitude", "Longitude", "year", "month"]
+
+
+def feature_columns(with_eddi: bool) -> List[str]:
+    return FEATURE_ORDER_WITH_EDDI if with_eddi else METEO_FEATURES
+
 
 def daterange(start: date, end: date) -> Iterable[date]:
     cur = start
@@ -114,6 +172,26 @@ def month_windows(start: date, end: date) -> List[Tuple[int, int, date, date]]:
     return windows
 
 
+def previous_complete_month(today: Optional[date] = None) -> Tuple[date, date]:
+    """Return (month_start, month_end) for the last fully completed calendar month."""
+    today = today or date.today()
+    first_this_month = date(today.year, today.month, 1)
+    end = first_this_month - timedelta(days=1)
+    start = date(end.year, end.month, 1)
+    return start, end
+
+
+def parse_month_arg(value: str) -> Tuple[date, date]:
+    """Parse YYYY-MM into inclusive month start/end."""
+    dt = datetime.strptime(value, "%Y-%m")
+    start = date(dt.year, dt.month, 1)
+    if dt.month == 12:
+        end = date(dt.year, 12, 31)
+    else:
+        end = date(dt.year, dt.month + 1, 1) - timedelta(days=1)
+    return start, end
+
+
 def specific_humidity(temp_c: np.ndarray, rh_pct: np.ndarray, pressure_hpa: float) -> np.ndarray:
     """Compute specific humidity (kg/kg) from T (°C), RH (%), and pressure (hPa)."""
     es = 6.112 * np.exp((17.67 * temp_c) / (temp_c + 243.5))
@@ -130,7 +208,9 @@ def mean_ignore_nan(arr: np.ndarray) -> float:
     return float(np.nanmean(arr))
 
 
-def daily_sums_from_hourly(times: Sequence[str], values: Sequence[Optional[float]]) -> Dict[str, float]:
+def daily_sums_from_hourly(
+    times: Sequence[str], values: Sequence[Optional[float]]
+) -> Dict[str, float]:
     buckets: Dict[str, List[float]] = defaultdict(list)
     for t, v in zip(times, values):
         if v is None:
@@ -139,20 +219,11 @@ def daily_sums_from_hourly(times: Sequence[str], values: Sequence[Optional[float
     return {d: float(np.sum(vals)) for d, vals in buckets.items() if vals}
 
 
-def daily_means_from_hourly(times: Sequence[str], values: Sequence[Optional[float]]) -> Dict[str, float]:
-    buckets: Dict[str, List[float]] = defaultdict(list)
-    for t, v in zip(times, values):
-        if v is None:
-            continue
-        buckets[t[:10]].append(float(v))
-    return {d: float(np.mean(vals)) for d, vals in buckets.items() if vals}
-
-
 def http_get_json(url: str, retries: int = 6, timeout: int = 300) -> object:
     last_err: Optional[Exception] = None
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "county-weather-monthly/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "county-weather-monthly/1.1"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as exc:  # noqa: BLE001 - retry broadly for flaky APIs
@@ -167,7 +238,7 @@ def http_get_bytes(url: str, retries: int = 6, timeout: int = 300) -> bytes:
     last_err: Optional[Exception] = None
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "county-weather-monthly/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "county-weather-monthly/1.1"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except Exception as exc:  # noqa: BLE001
@@ -185,7 +256,7 @@ def parse_asc(content: bytes) -> Tuple[dict, np.ndarray]:
     for i in range(6):
         parts = lines[i].split()
         key = parts[0].lower()
-        meta[key] = float(parts[1]) if key != "ncols" and key != "nrows" else int(float(parts[1]))
+        meta[key] = float(parts[1]) if key not in ("ncols", "nrows") else int(float(parts[1]))
     data = np.loadtxt(lines[6:], dtype=np.float64)
     expected = (meta["nrows"], meta["ncols"])
     if data.shape != expected:
@@ -215,6 +286,12 @@ def sample_asc(meta: dict, grid: np.ndarray, lats: np.ndarray, lons: np.ndarray)
 def load_counties(path: Path) -> List[dict]:
     with path.open(newline="") as f:
         rows = list(csv.DictReader(f))
+    if not rows:
+        raise SystemExit(f"No counties found in {path}")
+    required = {"COUNTY_MUNI_CODE", "Latitude", "Longitude"}
+    missing = required - set(rows[0].keys())
+    if missing:
+        raise SystemExit(f"{path} missing columns: {sorted(missing)}")
     for r in rows:
         r["Latitude"] = float(r["Latitude"])
         r["Longitude"] = float(r["Longitude"])
@@ -307,9 +384,10 @@ def fetch_weather_for_month(
     end: date,
     batch_size: int,
     cache_dir: Path,
+    force: bool = False,
 ) -> Dict[str, dict]:
     cache_path = cache_dir / f"weather_{year}{month:02d}.json"
-    if cache_path.exists():
+    if cache_path.exists() and not force:
         print(f"Loading weather cache {cache_path}", flush=True)
         with cache_path.open() as f:
             return json.load(f)
@@ -332,7 +410,6 @@ def fetch_weather_for_month(
             raise RuntimeError(f"Expected {len(batch)} payloads, got {len(payloads)}")
         for county, payload in zip(batch, payloads):
             results[county["COUNTY_MUNI_CODE"]] = aggregate_location_month(payload)
-        # be polite to the free API
         time.sleep(0.4)
 
     with cache_path.open("w") as f:
@@ -353,10 +430,11 @@ def fetch_eddi_month(
     end: date,
     cache_dir: Path,
     workers: int = 8,
+    force: bool = False,
 ) -> Dict[str, float]:
     scale = EDDI_SCALE_MAP[feature]
     cache_path = cache_dir / f"eddi_{scale}_{year}{month:02d}.json"
-    if cache_path.exists():
+    if cache_path.exists() and not force:
         print(f"Loading EDDI cache {cache_path}", flush=True)
         with cache_path.open() as f:
             return json.load(f)
@@ -397,95 +475,255 @@ def fetch_eddi_month(
     return out
 
 
-def write_output(path: Path, rows: List[dict]) -> None:
-    fieldnames = ["COUNTY_MUNI_CODE", "Latitude", "Longitude", "year", "month"] + FEATURES
+def row_key(row: dict) -> Tuple[str, int, int]:
+    return (
+        str(row["COUNTY_MUNI_CODE"]),
+        int(row["year"]),
+        int(row["month"]),
+    )
+
+
+def parse_csv_value(raw: str):
+    if raw is None or raw == "":
+        return float("nan")
+    try:
+        if "." in raw or "e" in raw.lower():
+            return float(raw)
+        return int(raw)
+    except ValueError:
+        return raw
+
+
+def load_existing_rows(path: Path) -> List[dict]:
+    if not path.exists():
+        return []
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        rows = []
+        for r in reader:
+            parsed = {k: parse_csv_value(v) if k not in ("COUNTY_MUNI_CODE",) else v for k, v in r.items()}
+            # Keep lat/lon as float
+            if "Latitude" in parsed:
+                parsed["Latitude"] = float(parsed["Latitude"])
+            if "Longitude" in parsed:
+                parsed["Longitude"] = float(parsed["Longitude"])
+            parsed["year"] = int(parsed["year"])
+            parsed["month"] = int(parsed["month"])
+            rows.append(parsed)
+    return rows
+
+
+def format_cell(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float):
+        return "" if math.isnan(v) else f"{v:.8g}"
+    return str(v)
+
+
+def write_output(path: Path, rows: List[dict], with_eddi: bool) -> None:
+    cols = feature_columns(with_eddi)
+    # Preserve any extra EDDI columns already present if merging mixed history
+    extras = []
+    for r in rows:
+        for k in r:
+            if k not in ID_FIELDS and k not in cols and k not in extras:
+                extras.append(k)
+    fieldnames = ID_FIELDS + cols + extras
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    rows_sorted = sorted(rows, key=lambda r: (r["year"], r["month"], r["COUNTY_MUNI_CODE"]))
     with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-        for row in rows:
-            out = {}
-            for k in fieldnames:
-                v = row.get(k)
-                if isinstance(v, float):
-                    out[k] = "" if math.isnan(v) else f"{v:.8g}"
-                elif v is None:
-                    out[k] = ""
-                else:
-                    out[k] = v
-            writer.writerow(out)
+        for row in rows_sorted:
+            writer.writerow({k: format_cell(row.get(k, "")) for k in fieldnames})
+
+
+def merge_rows(existing: List[dict], new_rows: List[dict]) -> List[dict]:
+    """Upsert by (COUNTY_MUNI_CODE, year, month)."""
+    merged = {row_key(r): r for r in existing}
+    for r in new_rows:
+        merged[row_key(r)] = r
+    return list(merged.values())
+
+
+def build_month_rows(
+    counties: List[dict],
+    year: int,
+    month: int,
+    weather: Dict[str, dict],
+    eddi_03: Optional[Dict[str, float]],
+    eddi_06: Optional[Dict[str, float]],
+    with_eddi: bool,
+) -> List[dict]:
+    rows = []
+    for c in counties:
+        code = c["COUNTY_MUNI_CODE"]
+        row = {
+            "COUNTY_MUNI_CODE": code,
+            "Latitude": c["Latitude"],
+            "Longitude": c["Longitude"],
+            "year": year,
+            "month": month,
+        }
+        w = weather.get(code, {})
+        for feat in METEO_FEATURES:
+            val = w.get(feat, float("nan"))
+            row[feat] = float(val) if val is not None else float("nan")
+        if with_eddi:
+            v3 = None if eddi_03 is None else eddi_03.get(code)
+            v6 = None if eddi_06 is None else eddi_06.get(code)
+            row["EDDI_ETrs_03m"] = float("nan") if v3 is None else float(v3)
+            row["EDDI_ETrs_06wk"] = float("nan") if v6 is None else float(v6)
+        rows.append(row)
+    return rows
+
+
+def resolve_period(args: argparse.Namespace) -> Tuple[date, date]:
+    modes = [bool(args.latest), bool(args.month), bool(args.start or args.end)]
+    if sum(modes) != 1:
+        raise SystemExit("Choose exactly one of: --latest, --month YYYY-MM, or --start/--end")
+
+    if args.latest:
+        start, end = previous_complete_month()
+        print(f"Using latest complete month: {start} .. {end}", flush=True)
+        return start, end
+
+    if args.month:
+        start, end = parse_month_arg(args.month)
+        print(f"Using month {args.month}: {start} .. {end}", flush=True)
+        return start, end
+
+    if not args.start or not args.end:
+        raise SystemExit("--start and --end are both required for range mode")
+    start = datetime.strptime(args.start, "%Y-%m-%d").date()
+    end = datetime.strptime(args.end, "%Y-%m-%d").date()
+    if end < start:
+        raise SystemExit("--end must be on or after --start")
+    return start, end
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Download/update monthly county weather averages for local use.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Each month: append/replace last complete month
+  python fetch_county_weather_monthly.py --counties ~/Downloads/county_list.csv \\
+      --output ~/Downloads/county_weather_monthly.csv --latest
+
+  # One specific month
+  python fetch_county_weather_monthly.py --counties ~/Downloads/county_list.csv \\
+      --output ~/Downloads/county_weather_monthly.csv --month 2026-06
+
+  # Include optional EDDI (slower; CONUS only)
+  python fetch_county_weather_monthly.py --counties ~/Downloads/county_list.csv \\
+      --output ~/Downloads/county_weather_monthly.csv --month 2026-06 --with-eddi
+""",
+    )
     parser.add_argument(
         "--counties",
         type=Path,
         default=Path.home() / "Downloads" / "county_list.csv",
+        help="CSV with COUNTY_MUNI_CODE,Latitude,Longitude",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path.home() / "Downloads" / "county_weather_monthly_2026_04_06.csv",
+        default=Path.home() / "Downloads" / "county_weather_monthly.csv",
+        help="Master CSV to create or update (upsert by county+year+month)",
     )
-    parser.add_argument("--start", default="2026-04-01")
-    parser.add_argument("--end", default="2026-06-30")
-    parser.add_argument("--batch-size", type=int, default=40)
-    parser.add_argument("--cache-dir", type=Path, default=Path("/tmp/weather_cache"))
+    parser.add_argument("--latest", action="store_true", help="Process the previous complete calendar month")
+    parser.add_argument("--month", type=str, help="Process one month as YYYY-MM")
+    parser.add_argument("--start", type=str, help="Range start YYYY-MM-DD (use with --end)")
+    parser.add_argument("--end", type=str, help="Range end YYYY-MM-DD (use with --start)")
+    parser.add_argument("--batch-size", type=int, default=40, help="Open-Meteo locations per request")
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path.home() / ".cache" / "county_weather_monthly",
+        help="Local cache for raw monthly pulls",
+    )
+    parser.add_argument("--force", action="store_true", help="Ignore cache and re-download")
+    parser.add_argument(
+        "--with-eddi",
+        action="store_true",
+        help="Also fetch NOAA PSL EDDI (optional; slower, CONUS only)",
+    )
     parser.add_argument("--eddi-workers", type=int, default=6)
+    parser.add_argument(
+        "--replace-output",
+        action="store_true",
+        help="Overwrite output instead of merging with existing rows",
+    )
     args = parser.parse_args()
 
-    start = datetime.strptime(args.start, "%Y-%m-%d").date()
-    end = datetime.strptime(args.end, "%Y-%m-%d").date()
+    start, end = resolve_period(args)
     args.cache_dir.mkdir(parents=True, exist_ok=True)
 
     counties = load_counties(args.counties)
     print(f"Loaded {len(counties)} counties from {args.counties}", flush=True)
+    print(f"Output: {args.output}", flush=True)
+    print(f"EDDI: {'enabled' if args.with_eddi else 'skipped (pass --with-eddi to enable)'}", flush=True)
 
-    # Also copy repo output
-    repo_output = Path("/workspace/data") / args.output.name
+    existing = [] if args.replace_output else load_existing_rows(args.output)
+    if existing:
+        print(f"Loaded {len(existing)} existing rows from {args.output}", flush=True)
 
-    all_rows: List[dict] = []
+    new_rows: List[dict] = []
     for year, month, ms, me in month_windows(start, end):
         print(f"\n=== {year}-{month:02d} ({ms} to {me}) ===", flush=True)
         weather = fetch_weather_for_month(
-            counties, year, month, ms, me, args.batch_size, args.cache_dir
+            counties,
+            year,
+            month,
+            ms,
+            me,
+            args.batch_size,
+            args.cache_dir,
+            force=args.force,
         )
-        eddi_03 = fetch_eddi_month(
-            counties, "EDDI_ETrs_03m", year, month, ms, me, args.cache_dir, args.eddi_workers
+        eddi_03 = eddi_06 = None
+        if args.with_eddi:
+            eddi_03 = fetch_eddi_month(
+                counties,
+                "EDDI_ETrs_03m",
+                year,
+                month,
+                ms,
+                me,
+                args.cache_dir,
+                args.eddi_workers,
+                force=args.force,
+            )
+            eddi_06 = fetch_eddi_month(
+                counties,
+                "EDDI_ETrs_06wk",
+                year,
+                month,
+                ms,
+                me,
+                args.cache_dir,
+                args.eddi_workers,
+                force=args.force,
+            )
+
+        month_rows = build_month_rows(
+            counties, year, month, weather, eddi_03, eddi_06, args.with_eddi
         )
-        eddi_06 = fetch_eddi_month(
-            counties, "EDDI_ETrs_06wk", year, month, ms, me, args.cache_dir, args.eddi_workers
-        )
+        new_rows.extend(month_rows)
 
-        for c in counties:
-            code = c["COUNTY_MUNI_CODE"]
-            row = {
-                "COUNTY_MUNI_CODE": code,
-                "Latitude": c["Latitude"],
-                "Longitude": c["Longitude"],
-                "year": year,
-                "month": month,
-            }
-            w = weather.get(code, {})
-            for feat in FEATURES:
-                if feat == "EDDI_ETrs_03m":
-                    val = eddi_03.get(code)
-                    row[feat] = float("nan") if val is None else float(val)
-                elif feat == "EDDI_ETrs_06wk":
-                    val = eddi_06.get(code)
-                    row[feat] = float("nan") if val is None else float(val)
-                else:
-                    val = w.get(feat, float("nan"))
-                    row[feat] = float(val) if val is not None else float("nan")
-            all_rows.append(row)
+        if args.replace_output:
+            combined = list(new_rows)
+        else:
+            combined = merge_rows(existing, new_rows)
+        write_output(args.output, combined, with_eddi=args.with_eddi)
+        print(f"Wrote {args.output} ({len(combined)} rows)", flush=True)
 
-        # checkpoint write after each month
-        write_output(args.output, all_rows)
-        write_output(repo_output, all_rows)
-        print(f"Wrote checkpoint ({len(all_rows)} rows) -> {args.output}", flush=True)
-
-    print(f"\nDone. {len(all_rows)} rows written to {args.output} and {repo_output}")
+    months = sorted({(r["year"], r["month"]) for r in new_rows})
+    print(f"\nDone. Updated {months} ({len(new_rows)} county-month rows) -> {args.output}", flush=True)
     return 0
 
 
