@@ -165,37 +165,35 @@ User wants to eventually produce, together:
 1. prover software library
 2. compact verifier application
 
-No concrete architecture coding was started yet in the prior chat; user asked for planning first.
+---
+
+## Status (MVP landed)
+Implemented on branch `cursor/triangle-merkle-mvp-2e31`:
+
+- Contract: `docs/mvp-contract.md`
+- Package: `spatial_merkle/` (prover + compact stdlib verifier)
+- Demo: `python3 -m spatial_merkle.demo`
+- Tests: `python3 -m unittest discover -s tests -v`
+
+Ops working end-to-end: `SetTriangleData`, `SplitTriangle`, query inclusion proofs.
 
 ---
 
 ## Recommended next work when resuming
 Unless user specifies otherwise, proceed in this order:
 
-1. **Write MVP contract (1 page equivalent)**
-   - leaf byte layout
-   - hash function
-   - coordinate quantization/precision
-   - canonical triangle ordering rule
-   - exact SplitTriangle predicate
-   - SetTriangleData rules
-   - proof package fields
-   - success criteria for “verifier is compact”
-
-2. **Implement smallest end-to-end demo**
-   - tiny in-memory mesh
-   - prover performs one split + one data update
-   - verifier accepts both
-   - query returns triangle/data with Merkle proof
-
-3. **Only then** scale to county shapefile triangulation / digitization workflow
+1. **Multi-triangle genesis helper** — build a tiny hand mesh (or box+diagonal) and exercise several splits
+2. **Point-in-triangle query with proof** — return containing leaf + Merkle inclusion
+3. **County shapefile → genesis triangulation** (prover-side only; keep verifier untouched)
+4. Replace HMAC auth with public-key signatures when packaging for a chain/TEE target
 
 ---
 
 ## Paste template for a new agent
 ```text
 Read this kickoff brief and continue from it:
-https://raw.githubusercontent.com/ramkumarmsu/ramkumarmsu.github.io/cursor/county-weather-monthly-2b78/docs/agent-kickoff-brief.md
+docs/agent-kickoff-brief.md
+Also read docs/mvp-contract.md and run the spatial_merkle demo/tests.
 
 Focus on the triangle Merkle prover/verifier architecture, not the weather script.
 
