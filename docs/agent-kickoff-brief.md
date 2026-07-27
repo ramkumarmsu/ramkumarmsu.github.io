@@ -1,203 +1,161 @@
-# Kickoff Brief — Triangle Merkle Prover / Verifier Architecture
+# Kickoff Brief — Dual Merkle Geographic Ledger
 
 Hand this to a future agent as prior context.
 User prefers plain language. Do not restart architecture debates already settled below unless asked.
 
-Optional deeper references:
+**Canonical project repo:** `GISBC` (not the faculty `ramkumarmsu.github.io` site).
+Cloud-agent code may temporarily live on a github.io branch for transfer into GISBC.
+
+Optional deeper references (may live in GISBC after import):
 - Planning memo: `docs/spatial-merkle-mesh-planning-summary.md`
-- Full chat export: `docs/cursor_chat_county_weather_and_spatial_mesh.txt`
-- Repo branch: `cursor/county-weather-monthly-2b78`
+- MVP triangle-tree contract (partial): `docs/mvp-contract.md`
+- Chat export: `docs/cursor_chat_county_weather_and_spatial_mesh.txt`
 
 ---
 
-## Project goal
-Build a verifiable spatial records system where:
+## Project goal (authoritative)
 
-1. Geographic space is partitioned into triangles
-2. Each triangle is a Merkle tree leaf
-3. Authoritative actors (“provers”) submit incremental updates with proofs
-4. A compact verifier checks those proofs cheaply
-5. A blockchain / trust network stores roots and accepts valid updates
-6. End users query facts and verify answers against the published root
+Digitize geographic regions so that **geographic algorithms can run on a blockchain
+as transactions**, and a verifier can check each transaction with:
 
-This is meant for reliable digitization of parcel boundaries, zones, utility lines, etc.
+- **O(1)** logical / geometric predicate checks
+- **O(log N)** hash operations (Merkle proofs)
 
-Useful because maps here are not just pictures — they allocate rights, money, liability, or access. The chain commitment makes spatial facts attributable, auditable, non-conflicting, and independently checkable.
+not a full GIS recompute.
 
----
+Typical algorithms / transaction classes (non-exhaustive):
+- point location
+- region delegation
+- merging regions into larger regions
+- boundary updates / splits
+- attribution / data updates on tiles or boundary segments
 
-## Core architecture
-
-### Geometry substrate
-- Start from a county polygon
-- Triangulate the county interior
-- Build a bounding box around it
-- Triangulate the exterior region = box minus county
-- Lon/lat is acceptable for parcel-scale point-in-triangle queries; projection is not required for the current design intent
-- Later: refine/constrain triangles for parcels, zones, utilities
-
-### Merkle leaf
-A leaf hash commits to:
-- the 3 triangle vertices in **canonical order**
-- **data associated with that triangle**
-
-Fixed coordinate precision is required so hashes are deterministic.
-
-### Roles
-**Provers**
-- Entities who need to provide reliable data
-- Includes government agencies, utilities, surveyors, licensed digitizers
-- They prepare updates and generate proofs
-
-**Verifiers**
-- Blockchain / network nodes that validate update transactions and advance the root
-- End users / apps that verify query answers against the root
-- Verification must stay trivial
-
-### Design principle
-- Verifier work: cheap and obvious
-- Prover work: may be heavier in theory, but should be made easy in practice with a library
-- Preserve non-overlap by construction via restricted local operations
-- Do **not** put full GIS inside the verifier
+Maps here allocate rights, money, liability, or access. The chain commitment makes
+spatial facts attributable, auditable, non-conflicting, and independently checkable.
 
 ---
 
-## First-class operations (MVP)
+## Core representation: two Merkle trees per geographic region
 
-### 1. SplitTriangle
-Cut one triangle into two by specifying:
-- a corner of the triangle
-- a point on the opposite edge
+Each geographic region (state, county, parcel set, …) is committed by **two** roots:
 
-Verifier checks:
-- old leaf exists under old root (Merkle proof)
-- point lies on the opposite edge (deterministic rule)
-- two child triangles are correctly formed and canonicalized
-- new root correctly replaces one leaf with two
-- payload inheritance rule is followed
+### 1. Triangle-tile tree
+- Region interior is partitioned into triangles (“tiles”)
+- **Each triangle is a Merkle leaf**
+- Leaf commits to: canonical triangle geometry + associated data
+- Used for area coverage, point-in-region via tile proofs, paint/attribute updates, etc.
 
-### 2. SetTriangleData
-Attach/update data on an existing triangle leaf.
+### 2. Boundary-line tree
+- Region border is a sequence of boundary segments (edges / polylines broken into segments)
+- **Each boundary segment is a Merkle leaf**
+- Leaf commits to: canonical segment endpoints (+ optional segment data)
+- Used for border identity, shared borders between adjacent regions, merge/split of
+  regions along boundaries, delegation of border responsibility, etc.
 
-Verifier checks:
-- Merkle proof of old leaf
-- geometry unchanged
-- new data hash/payload valid
-- authorization / signature for that data class
-- Merkle update to new root
+A published region state is therefore at least:
 
-These two ops are enough to begin progressive digitization by refinement.
+```
+RegionState = { triangle_root, boundary_root, …metadata/auth }
+```
 
-### Later ops (not MVP, but anticipated)
-- Reverse merge of a recorded split pair
-- Reassign triangle between parcels (boundary move)
-- Retire triangle from land domain (e.g. inundation)
-- Introduce triangle into domain (e.g. accretion/fill)
-- Temporal versioning of roots and as-of-date queries
+Fixed coordinate precision is required so hashes and predicates are deterministic.
 
 ---
 
-## Non-overlap logic
-If:
-- genesis mesh is a valid non-overlapping partition, and
-- only legal local ops are accepted,
+## Roles
 
-then non-overlap is preserved by construction.
-Verifiers should not need a global geometry re-check on every transaction.
+**Provers** (agencies, utilities, surveyors, licensed digitizers, region authorities)
+- Maintain mesh + boundary structure
+- Run the heavy geographic work
+- Emit compact proof packages for transactions
 
----
+**Verifiers** (chain nodes / TEE / auditors / end users)
+- Check O(1) predicates + O(log N) Merkle paths
+- Accept/reject and advance roots
+- Must **not** run general GIS, shapefile IO, or global remeshing
 
-## Two software components to build
-
-### A. Prover library (larger, ergonomic)
-Helps provers:
-- maintain triangle mesh + adjacency
-- canonicalize points/triangles
-- apply splits / data updates
-- maintain an incremental Merkle tree
-- emit update proof packages (old root → new root)
-- answer queries with inclusion/attribution proofs
-
-GIS dependencies are allowed here.
-
-### B. Compact verifier application (tiny)
-Intended to run inside trustworthy boundaries such as:
-- blockchain runtime / smart contract constraints
-- TEE / enclave
-- air-gapped auditor
-
-It should only:
-- verify Merkle paths
-- evaluate tiny predicates for allowed ops
-- check authorization
-- accept/reject and compute/accept new root
-
-No shapefile IO. No general triangulation. No heavy dependencies.
+Design rule: put complexity in the prover library; keep the verifier tiny.
 
 ---
 
-## Temporal / real-world hard case
-Boundaries change over time. Thin and shifting geographies (e.g. Louisiana coastal/river boundaries) are a motivating stress case.
+## Verifier complexity budget (non-negotiable)
 
-Therefore the long-term system is a **versioned spatial ledger**:
-- sequence of roots over time
-- feature effective dates
-- as-of-date queries
-- explicit change reasons and authorities
+For every accepted transaction type:
 
-MVP can still begin with split + data update on a static genesis mesh.
+| Work | Bound |
+|------|-------|
+| Geometric / logical predicates | **O(1)** (fixed number of local checks) |
+| Hashing / Merkle | **O(log N)** in the size of the touched tree(s) |
 
----
-
-## Settled preferences from prior discussion
-- Put whole GIS on chain is an aspiration, but only valuable if verifiable multi-party spatial truth is the product
-- Leaf = canonical triangle + data
-- Verifier triviality is non-negotiable
-- Prover UX matters in practice
-- Start with restricted local ops, not arbitrary remesh transactions
-- Projection concerns are secondary for parcel-scale queries
-- EDDI/weather work is a separate side track, not this architecture
+If a proposed op needs a global geometry scan, it is the wrong op — redesign into
+local ops that preserve invariants by construction.
 
 ---
 
-## Requested collaboration
-User wants to eventually produce, together:
-1. prover software library
-2. compact verifier application
+## Invariants (target)
+
+- Triangle tiles of a region are a non-overlapping cover of that region’s interior
+- Boundary segments of a region form its border commitment
+- Adjacent regions that share a border can prove agreement on shared boundary leaves
+- Only legal local ops are accepted ⇒ global consistency is preserved incrementally
+- Lon/lat fixed-point is acceptable for parcel-scale predicates; projection is secondary
 
 ---
 
-## Status (MVP landed)
-Implemented on branch `cursor/triangle-merkle-mvp-2e31`:
+## What already exists (partial prototype)
 
-- Contract: `docs/mvp-contract.md`
-- Package: `spatial_merkle/` (prover + compact stdlib verifier)
-- Demo: `python3 -m spatial_merkle.demo`
-- Visual demo: `python3 -m spatial_merkle.build_visual_demo` → `docs/spatial-merkle-visual-demo.html`
-- Tests: `python3 -m unittest discover -s tests -v`
+Implemented as an early **triangle-tree only** sketch:
 
-Ops working end-to-end: `SetTriangleData`, `SplitTriangle`, query inclusion proofs.
-Visual scenario: 36-gon hub mesh, 5 radial boundary cuts, region paint, inside/outside claim.
+- `SplitTriangle`, `SetTriangleData`
+- stdlib compact verifier + prover demo
+- visual demo (needs geographic state/county shapes, not pie slices)
+
+**Missing relative to this brief:**
+- boundary-line Merkle tree
+- dual-root region state
+- point-location transaction
+- region delegation transaction
+- region merge transaction
+- explicit O(1)/O(log N) checklist per tx type
+- realistic state→county demo geometry
+
+EDDI/weather scripts are an unrelated side track.
 
 ---
 
-## Recommended next work when resuming
-Unless user specifies otherwise, proceed in this order:
+## Settled preferences
 
-1. **Multi-triangle genesis helper** — build a tiny hand mesh (or box+diagonal) and exercise several splits
-2. **Point-in-triangle query with proof** — return containing leaf + Merkle inclusion
-3. **County shapefile → genesis triangulation** (prover-side only; keep verifier untouched)
-4. Replace HMAC auth with public-key signatures when packaging for a chain/TEE target
+- Dual trees per region (tiles + boundary segments)
+- Verifier triviality is non-negotiable (O(1) logic, O(log N) hashes)
+- Prover UX matters; ship a library
+- Restricted local ops beat arbitrary remesh transactions
+- Demo geometry should look like geographic regions (e.g. state outline ÷ counties),
+  even if simplified to ~30–40 outer sides and 4–5 counties for transaction count
+
+---
+
+## Recommended next work
+
+1. **Rewrite contract for dual trees** — boundary leaf layout + triangle leaf layout +
+   `RegionState` roots + complexity budget
+2. **Define first transaction set with proof shapes**
+   - point location
+   - paint/delegate triangle set (or region delegation)
+   - merge two regions (boundary + triangle root updates)
+   - keep `SplitTriangle` / boundary split as refinement ops
+3. **Geographic visual demo** — schematic state (~30–40 sides) divided into 4–5
+   county polygons; animate boundary cuts + inside/outside (delegation) txs
+4. Only later: real county shapefile ingestion on the prover side
 
 ---
 
 ## Paste template for a new agent
 ```text
-Read this kickoff brief and continue from it:
-docs/agent-kickoff-brief.md
-Also read docs/mvp-contract.md and run the spatial_merkle demo/tests.
+Read docs/agent-kickoff-brief.md in the GISBC repo.
 
-Focus on the triangle Merkle prover/verifier architecture, not the weather script.
+This project commits each geographic region with TWO Merkle trees:
+(1) triangular tiles as leaves, (2) boundary segments as leaves.
+Blockchain txs must verify in O(1) predicates + O(log N) hashes.
 
 My next goal:
 <fill in>
