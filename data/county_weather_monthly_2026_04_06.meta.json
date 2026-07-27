@@ -1,0 +1,40 @@
+{
+  "period": {
+    "start": "2026-04-01",
+    "end": "2026-06-30"
+  },
+  "aggregation": "monthly mean",
+  "sources": {
+    "meteorological": "Open-Meteo Historical Forecast API, model=ecmwf_ifs025",
+    "EDDI": "NOAA PSL EDDI CONUS archive (EDDI_ETrs_03mn, EDDI_ETrs_06wk); empty outside CONUS"
+  },
+  "units": {
+    "t2m": "C",
+    "t850": "C",
+    "t250": "C",
+    "tmax": "C",
+    "d2m": "C",
+    "q250": "kg/kg",
+    "q850": "kg/kg",
+    "r500": "%",
+    "r850": "%",
+    "r250": "%",
+    "u850": "m/s",
+    "u250": "m/s",
+    "v500": "m/s",
+    "v250": "m/s",
+    "v850": "m/s",
+    "u10": "m/s",
+    "v10": "m/s",
+    "sp": "hPa",
+    "SRO": "mm/day (monthly mean of daily totals)",
+    "tp": "mm/day (monthly mean of daily totals)",
+    "EDDI_ETrs_03m": "EDDI sigma (monthly mean of daily 3-month ETrs EDDI)",
+    "EDDI_ETrs_06wk": "EDDI sigma (monthly mean of daily 6-week ETrs EDDI)"
+  },
+  "notes": [
+    "q850/q250 derived from temperature and relative humidity at the pressure level",
+    "tmax is the monthly mean of daily maximum 2-m temperature",
+    "EDDI values are blank for locations outside the CONUS EDDI grid"
+  ]
+}
