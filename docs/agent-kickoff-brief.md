@@ -173,9 +173,11 @@ Implemented on branch `cursor/triangle-merkle-mvp-2e31`:
 - Contract: `docs/mvp-contract.md`
 - Package: `spatial_merkle/` (prover + compact stdlib verifier)
 - Demo: `python3 -m spatial_merkle.demo`
+- Visual demo: `python3 -m spatial_merkle.build_visual_demo` → `docs/spatial-merkle-visual-demo.html`
 - Tests: `python3 -m unittest discover -s tests -v`
 
 Ops working end-to-end: `SetTriangleData`, `SplitTriangle`, query inclusion proofs.
+Visual scenario: 36-gon hub mesh, 5 radial boundary cuts, region paint, inside/outside claim.
 
 ---
 

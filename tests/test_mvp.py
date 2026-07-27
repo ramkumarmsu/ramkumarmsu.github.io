@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import unittest
 
 from spatial_merkle import CompactVerifier, Point, Prover, quantize
 from spatial_merkle.geometry import point_on_open_segment
 from spatial_merkle.leaf import Leaf, leaf_hash
 from spatial_merkle.merkle import MerkleTree
-from spatial_merkle.verifier import auth_message
 
 
 class TestLeafCanonical(unittest.TestCase):
