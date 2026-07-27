@@ -9,6 +9,7 @@ Continues the spatial Merkle mesh project from
 2. **Prover library** — `spatial_merkle/prover.py` (mesh + proofs)
 3. **Compact verifier** — `spatial_merkle/verifier.py` (stdlib only)
 4. **End-to-end demo** — genesis → set data → split → query proofs
+5. **Visual demo** — 36-gon → 5 regions with animated cut / inside-outside txs
 
 Ops implemented: `SetTriangleData`, `SplitTriangle`.
 
@@ -17,7 +18,10 @@ Ops implemented: `SetTriangleData`, `SplitTriangle`.
 ```bash
 # from repo root
 python3 -m spatial_merkle.demo
+python3 -m spatial_merkle.build_visual_demo
 python3 -m unittest discover -s tests -v
 ```
+
+Open `docs/spatial-merkle-visual-demo.html` in a browser (Play / Next through transactions).
 
 No third-party packages required.
