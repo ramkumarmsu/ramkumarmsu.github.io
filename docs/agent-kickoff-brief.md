@@ -1,6 +1,8 @@
 # Kickoff Brief — Dual Merkle Geographic Ledger
 
 Hand this to a future agent as prior context.
+**Primary agent entry point:** repo-root `README.md` (this file is the longer twin).
+
 User prefers plain language. Do not restart architecture debates already settled below unless asked.
 
 **Canonical project repo:** `GISBC` (not the faculty `ramkumarmsu.github.io` site).
@@ -151,7 +153,7 @@ EDDI/weather scripts are an unrelated side track.
 
 ## Paste template for a new agent
 ```text
-Read docs/agent-kickoff-brief.md in the GISBC repo.
+Read README.md in the GISBC repo (agent handoff).
 
 This project commits each geographic region with TWO Merkle trees:
 (1) triangular tiles as leaves, (2) boundary segments as leaves.
